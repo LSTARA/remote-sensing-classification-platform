@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}遥感图像场景分类系统{% endblock %}</title>
+    <!-- 使用多个备用CDN -->
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #f0f2f5;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* 导航栏样式 - 深蓝色 */
+        .navbar {
+            background: #0a2540;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            padding: 0.8rem 0;
+        }
+
+        .navbar-brand {
+            font-size: 1.3rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: white;
+            text-decoration: none;
+        }
+
+        .navbar-brand i {
+            margin-right: 8px;
+        }
+
+        .navbar-brand:hover {
+            color: white;
+        }
+
+        .nav-link {
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+        }
+
+        .nav-link:hover {
+            transform: translateY(-2px);
+            opacity: 0.8;
+            color: white;
+        }
+
+        /* 卡片样式 */
+        .card {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.06);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .card-header {
+            background: #0a2540;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.2rem;
+        }
+
+        .card-header h4, .card-header h5 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        /* 按钮样式 - 深蓝色 */
+        .btn-primary {
+            background: #0a2540;
+            border: none;
+            border-radius: 50px;
+            padding: 6px 20px;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background: #1a3a5c;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(10, 37, 64, 0.4);
+        }
+
+        .btn-secondary {
+            border-radius: 50px;
+            padding: 6px 20px;
+            font-size: 0.85rem;
+        }
+
+        /* 首页标题样式 */
+        .main-title {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #0a2540;
+            margin-bottom: 1.5rem;
+            position: relative;
+            display: inline-block;
+        }
+
+        .main-title:after {
+            content: none;
+        }
+
+        /* 卡片图标样式 */
+        .card-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .text-primary-custom {
+            color: #0a2540;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-text {
+            font-size: 0.85rem;
+        }
+
+        .card-body.py-4 {
+            padding: 2rem 1.5rem !important;
+        }
+
+        /* 表格样式 */
+        .table {
+            margin-bottom: 0;
+            font-size: 0.85rem;
+        }
+
+        .table thead th {
+            background: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .table-hover tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        /* 进度条样式 */
+        .progress {
+            height: 8px;
+            border-radius: 10px;
+            background: #e9ecef;
+        }
+
+        .progress-bar {
+            background: #0a2540;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            line-height: 8px;
+        }
+
+        .container-main {
+            padding: 25px 20px;
+            min-height: calc(100vh - 70px);
+        }
+
+        /* 统计卡片样式 */
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.06);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h5 {
+            color: #6c757d;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+
+        .stat-card h2 {
+            color: #0a2540;
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0;
+        }
+
+        .auth-card {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 768px) {
+            .main-title {
+                font-size: 1.8rem;
+            }
+            .container-main {
+                padding: 15px;
+            }
+            .card-body.py-4 {
+                padding: 1.5rem 1rem !important;
+            }
+        }
+
+        /* 下拉菜单样式 */
+        .dropdown-menu {
+            position: absolute;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            min-width: 160px;
+            padding: 8px 0;
+            list-style: none;
+        }
+        .dropdown-item {
+            display: block;
+            padding: 8px 20px;
+            color: #333;
+            text-decoration: none;
+            cursor: pointer;
+            background: none;
+            border: none;
+            width: 100%;
+            text-align: left;
+        }
+        .dropdown-item:hover {
+            background: #f0f2f5;
+        }
+        .nav-item.dropdown {
+            position: relative;
+        }
+        .dropdown-toggle::after {
+            content: " ▼";
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'classification:index' %}">
+                <i class="fas fa-satellite"></i> 遥感图像场景分类系统
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                {% if user.is_authenticated %}
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'classification:index' %}">
+                            <i class="fas fa-home"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'classification:classify' %}">
+                            <i class="fas fa-upload"></i> 图像分类
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'classification:history' %}">
+                            <i class="fas fa-history"></i> 历史记录
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'classification:statistics' %}">
+                            <i class="fas fa-chart-bar"></i> 统计信息
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user"></i> {{ user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            <li>
+                                <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item">
+                                        <i class="fas fa-sign-out-alt"></i> 退出登录
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container container-main">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

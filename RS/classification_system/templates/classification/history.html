@@ -1,0 +1,313 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}历史记录 - 遥感图像分类系统{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h4><i class="fas fa-history"></i> 分类历史记录</h4>
+    </div>
+    <div class="card-body">
+        <!-- 搜索和筛选栏 -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" id="searchInput" class="form-control" placeholder="搜索文件名、ZIP包名或类别...">
+                </div>
+                <small class="text-muted">💡 支持搜索ZIP压缩包名称（如：test.zip）</small>
+            </div>
+            <div class="col-md-3">
+                <select id="categoryFilter" class="form-select">
+                    <option value="">全部类别</option>
+                    {% for record in page_obj %}
+                    <option value="{{ record.get_predicted_class_display }}">{{ record.get_predicted_class_display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="confidenceFilter" class="form-select">
+                    <option value="">全部确信度</option>
+                    <option value="high">确信度高 (≥75%)</option>
+                    <option value="medium">确信度中等 (50%-75%)</option>
+                    <option value="low">确信度低 (＜50%)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <input type="date" id="dateFilter" class="form-control">
+                <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100" onclick="resetFilters()">
+                    <i class="fas fa-undo"></i> 重置筛选
+                </button>
+            </div>
+        </div>
+
+        <!-- 过滤结果信息 -->
+        <div id="filterInfo" class="mb-3"></div>
+
+        <div class="table-responsive">
+            <table class="table table-hover" id="historyTable">
+                <thead>
+                    <tr>
+                        <th>图像</th>
+                        <th>文件名</th>
+                        <th>来源</th>
+                        <th>预测类别</th>
+                        <th>识别确信度</th>
+                        <th>处理时间</th>
+                        <th>上传时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in page_obj %}
+                    <tr class="history-row"
+                        data-filename="{{ record.original_filename|lower }}"
+                        data-source-zip="{% if record.source_zip_name %}{{ record.source_zip_name|lower }}{% endif %}"
+                        data-category="{{ record.get_predicted_class_display }}"
+                        data-confidence="{{ record.confidence }}"
+                        data-date="{{ record.created_at|date:'Y-m-d' }}">
+                        <td>
+                            <a href="{{ record.image.url }}" target="_blank">
+                                <img src="{{ record.image.url }}" alt="预览" style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px;">
+                            </a>
+                        </a>
+                        <td>
+                            {{ record.original_filename|truncatechars:35 }}
+                            <br>
+                            <small class="text-muted">ID: {{ record.id }}</small>
+                        </a>
+                        <!-- 来源：去掉底色，纯文字+图标 -->
+                        <td>
+                            {% if record.source_zip_name %}
+                                <i class="fas fa-file-archive" style="color: #6c757d;"></i>
+                                <span style="color: #6c757d;"> {{ record.source_zip_name|truncatechars:25 }}</span>
+                                <br>
+                                <small class="text-muted">ZIP批量上传</small>
+                            {% else %}
+                                <i class="fas fa-upload" style="color: #17a2b8;"></i>
+                                <span style="color: #17a2b8;"> 单张上传</span>
+                            {% endif %}
+                        </a>
+                        <!-- 预测类别：去掉底色，纯文字 -->
+                        <td>
+                            <span style="color: #0a2540; font-weight: 500;">{{ record.get_predicted_class_display }}</span>
+                        </a>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div class="progress" style="width: 100px;">
+                                    <div class="progress-bar {% if record.confidence > 80 %}bg-success{% elif record.confidence > 60 %}bg-primary{% elif record.confidence > 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                         style="width: {{ record.confidence }}%">
+                                    </div>
+                                </div>
+                                <small>{{ record.confidence|floatformat:1 }}%</small>
+                                {% if record.confidence >= 90 %}
+                                    <span>🟢</span>
+                                {% elif record.confidence >= 75 %}
+                                    <span>🔵</span>
+                                {% elif record.confidence >= 60 %}
+                                    <span>🟡</span>
+                                {% elif record.confidence >= 40 %}
+                                    <span>🟠</span>
+                                {% else %}
+                                    <span>🔴</span>
+                                {% endif %}
+                            </div>
+                        </a>
+                        <td>{{ record.processing_time|floatformat:3 }}秒</a>
+                        <td>{{ record.created_at|date:"Y-m-d H:i:s" }}</a>
+                        <!-- 操作栏：去掉底色，纯图标 -->
+                        <td class="text-nowrap" style="white-space: nowrap;">
+                            <a href="{% url 'classification:record_detail' record.id %}"
+                               style="color: #17a2b8; text-decoration: none; margin-right: 12px; font-size: 1rem;"
+                               title="查看详情">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <button onclick="deleteRecord({{ record.id }})"
+                                    style="color: #dc3545; background: none; border: none; cursor: pointer; font-size: 1rem; padding: 0;"
+                                    title="删除记录">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </a>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle"></i> 暂无分类记录
+                        </a>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 分页 -->
+        {% if page_obj.has_other_pages %}
+        <nav>
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1">&laquo; 第一页</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a>
+                </li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">最后一页 &raquo;</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+        <p class="text-muted mt-3">共 {{ total_count }} 条记录</p>
+    </div>
+</div>
+
+<script>
+// 删除记录函数
+function deleteRecord(recordId) {
+    if (confirm('确定要删除这条记录吗？')) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/record/${recordId}/delete/`;
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// 过滤功能 - 支持搜索ZIP文件名
+function filterTable() {
+    const searchText = document.getElementById('searchInput')?.value.toLowerCase().trim() || '';
+    const categoryValue = document.getElementById('categoryFilter')?.value || '';
+    const confidenceValue = document.getElementById('confidenceFilter')?.value || '';
+    const dateValue = document.getElementById('dateFilter')?.value || '';
+
+    const rows = document.querySelectorAll('#historyTable tbody tr.history-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const filename = row.dataset.filename || '';
+        const sourceZip = row.dataset.sourceZip || '';
+        const category = row.dataset.category || '';
+        const confidence = parseFloat(row.dataset.confidence) || 0;
+        const date = row.dataset.date || '';
+
+        let show = true;
+
+        // 搜索过滤
+        if (searchText) {
+            const matchesFilename = filename.includes(searchText);
+            const matchesZip = sourceZip.includes(searchText);
+            const matchesCategory = category.toLowerCase().includes(searchText);
+            if (!matchesFilename && !matchesZip && !matchesCategory) {
+                show = false;
+            }
+        }
+
+        // 类别过滤
+        if (show && categoryValue && category !== categoryValue) {
+            show = false;
+        }
+
+        // 确信度过滤
+        if (show && confidenceValue) {
+            if (confidenceValue === 'high' && confidence < 75) show = false;
+            else if (confidenceValue === 'medium' && (confidence < 50 || confidence >= 75)) show = false;
+            else if (confidenceValue === 'low' && confidence >= 50) show = false;
+        }
+
+        // 日期过滤
+        if (show && dateValue && date !== dateValue) {
+            show = false;
+        }
+
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+
+    // 显示过滤结果
+    const filterInfo = document.getElementById('filterInfo');
+    if (filterInfo) {
+        const totalRows = rows.length;
+        if (searchText || categoryValue || confidenceValue || dateValue) {
+            if (visibleCount === 0) {
+                filterInfo.innerHTML = '<div class="alert alert-warning py-2"><i class="fas fa-exclamation-triangle"></i> 没有找到匹配的记录（共' + totalRows + '条记录）</div>';
+            } else {
+                filterInfo.innerHTML = '<div class="alert alert-success py-2"><i class="fas fa-check-circle"></i> 找到 ' + visibleCount + ' 条匹配记录（共' + totalRows + '条）</div>';
+            }
+        } else {
+            filterInfo.innerHTML = '';
+        }
+    }
+}
+
+// 重置筛选
+function resetFilters() {
+    const searchInput = document.getElementById('searchInput');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const confidenceFilter = document.getElementById('confidenceFilter');
+    const dateFilter = document.getElementById('dateFilter');
+
+    if (searchInput) searchInput.value = '';
+    if (categoryFilter) categoryFilter.value = '';
+    if (confidenceFilter) confidenceFilter.value = '';
+    if (dateFilter) dateFilter.value = '';
+
+    filterTable();
+}
+
+// 绑定事件
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const confidenceFilter = document.getElementById('confidenceFilter');
+    const dateFilter = document.getElementById('dateFilter');
+
+    if (searchInput) searchInput.addEventListener('keyup', filterTable);
+    if (categoryFilter) categoryFilter.addEventListener('change', filterTable);
+    if (confidenceFilter) confidenceFilter.addEventListener('change', filterTable);
+    if (dateFilter) dateFilter.addEventListener('change', filterTable);
+
+    // 去重类别选项
+    if (categoryFilter) {
+        const seen = new Set();
+        const options = categoryFilter.querySelectorAll('option');
+        options.forEach(option => {
+            if (option.value && seen.has(option.value)) {
+                option.remove();
+            } else if (option.value) {
+                seen.add(option.value);
+            }
+        });
+    }
+});
+</script>
+
+<style>
+.history-row {
+    transition: background 0.2s;
+}
+.history-row:hover {
+    background: #f8f9fa !important;
+}
+.progress {
+    height: 6px;
+}
+</style>
+{% endblock %}

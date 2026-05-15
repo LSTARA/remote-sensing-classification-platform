@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}记录详情 - 遥感图像分类系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-image"></i> 原始图像</h4>
+            </div>
+            <div class="card-body text-center">
+                <img src="{{ record.image.url }}" alt="图像" style="max-width: 100%;" class="img-fluid">
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-info-circle"></i> 详细信息</h4>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <tr>
+                        <th>原始文件名：</th>
+                        <td>{{ record.original_filename }}</td>
+                    </tr>
+                    <tr>
+                        <th>预测类别：</th>
+                        <td><span class="badge bg-primary">{{ record.get_predicted_class_display }}</span></td>
+                    </tr>
+                    <tr>
+                        <th>识别确信度：</th>
+                        <td>
+                            <div class="progress" style="width: 150px;">
+                                <div class="progress-bar {% if record.confidence > 80 %}bg-success{% elif record.confidence > 60 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     style="width: {{ record.confidence }}%">
+                                </div>
+                            </div>
+                            <span class="ms-2">{{ record.confidence|floatformat:2 }}%</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>处理时间：</th>
+                        <td>{{ record.processing_time|floatformat:3 }}秒</td>
+                    </tr>
+                    <tr>
+                        <th>上传时间：</th>
+                        <td>{{ record.created_at|date:"Y-m-d H:i:s" }}</td>
+                    </tr>
+                </table>
+
+                <div class="mt-3">
+                    <a href="{% url 'classification:history' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> 返回
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
