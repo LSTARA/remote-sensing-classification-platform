@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}记录详情 - 遥感图像分类系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-image"></i> 原始图像</h4>
+            </div>
+            <div class="card-body text-center">
+                {% if heatmap_url %}
+                <div class="mb-2">
+                    <button id="btnOriginal" class="btn btn-sm btn-primary" onclick="switchView('original')">原图</button>
+                    <button id="btnHeatmap" class="btn btn-sm btn-outline-secondary" onclick="switchView('heatmap')">Grad-CAM 热力图</button>
+                </div>
+                <img id="imgOriginal" src="{{ record.image.url }}" alt="图像" style="max-width: 100%;" class="img-fluid">
+                <img id="imgHeatmap" src="{{ heatmap_url }}" alt="Grad-CAM 热力图" style="max-width: 100%; display: none;" class="img-fluid">
+                {% else %}
+                <img src="{{ record.image.url }}" alt="图像" style="max-width: 100%;" class="img-fluid">
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-info-circle"></i> 详细信息</h4>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <tr>
+                        <th>原始文件名：</th>
+                        <td>{{ record.original_filename }}</td>
+                    </tr>
+                    <tr>
+                        <th>预测类别：</th>
+                        <td><span class="badge bg-primary">{{ record.get_predicted_class_display }}</span></td>
+                    </tr>
+                    <tr>
+                        <th>识别确信度：</th>
+                        <td>
+                            <div class="progress" style="width: 150px;">
+                                <div class="progress-bar {% if record.confidence > 80 %}bg-success{% elif record.confidence > 60 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     style="width: {{ record.confidence }}%">
+                                </div>
+                            </div>
+                            <span class="ms-2">{{ record.confidence|floatformat:2 }}%</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>使用模型：</th>
+                        <td>{{ record.model_name|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <th>处理时间：</th>
+                        <td>{{ record.processing_time|floatformat:3 }}秒</td>
+                    </tr>
+                    <tr>
+                        <th>上传时间：</th>
+                        <td>{{ record.created_at|date:"Y-m-d H:i:s" }}</td>
+                    </tr>
+                </table>
+
+                <div class="mt-3 d-flex gap-2">
+                    <a href="{% url 'classification:history' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> 返回
+                    </a>
+                    <button class="btn btn-outline-primary" onclick="copyResult()">
+                        <i class="fas fa-copy"></i> 复制结果
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function switchView(view) {
+    document.getElementById('imgOriginal').style.display = view === 'original' ? '' : 'none';
+    document.getElementById('imgHeatmap').style.display = view === 'heatmap' ? '' : 'none';
+    document.getElementById('btnOriginal').className = view === 'original'
+        ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-secondary';
+    document.getElementById('btnHeatmap').className = view === 'heatmap'
+        ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-secondary';
+}
+function copyResult() {
+    var text = [
+        '文件: {{ record.original_filename|escapejs }}',
+        '类别: {{ record.get_predicted_class_display|escapejs }}',
+        '确信度: {{ record.confidence|floatformat:2 }}%',
+        '模型: {{ record.model_name|default:"-"|escapejs }}',
+        '时间: {{ record.created_at|date:"Y-m-d H:i:s" }}'
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(function() {
+        alert('已复制到剪贴板');
+    });
+}
+</script>
+{% endblock %}

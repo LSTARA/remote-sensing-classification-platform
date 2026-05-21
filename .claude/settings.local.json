@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"D:/LWGANet-main\" 2>/dev/null)",
+      "Read(//d/LWGANet-main/**)"
+    ]
+  }
+}

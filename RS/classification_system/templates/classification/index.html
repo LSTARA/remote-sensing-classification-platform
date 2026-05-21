@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center">
+        <h1 class="main-title">遥感图像场景分类系统</h1>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6 mb-4">
+        <div class="card text-center">
+            <div class="card-body py-4">
+                <div class="card-icon">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-primary-custom"></i>
+                </div>
+                <h4 class="card-title mb-2">上传图像</h4>
+                <p class="card-text text-muted mb-3">支持JPEG、PNG格式的遥感图像上传</p>
+                <a href="{% url 'classification:classify' %}" class="btn btn-primary">
+                    <i class="fas fa-arrow-right"></i> 开始分类
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-4">
+        <div class="card text-center">
+            <div class="card-body py-4">
+                <div class="card-icon">
+                    <i class="fas fa-chart-line fa-3x text-primary-custom"></i>
+                </div>
+                <h4 class="card-title mb-2">数据分析</h4>
+                <p class="card-text text-muted mb-3">详细的分类记录和统计信息</p>
+                <a href="{% url 'classification:statistics' %}" class="btn btn-primary">
+                    <i class="fas fa-chart-bar"></i> 查看统计
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if recent_records %}
+<div class="row mt-3">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-history"></i> 最近分类记录</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>图像</th>
+                                <th>预测类别</th>
+                                <th>置信度</th>
+                                <th>处理时间</th>
+                                <th>上传时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in recent_records %}
+                            <tr>
+                                <td>
+                                    <a href="{{ record.image.url }}" target="_blank">
+                                        <img src="{{ record.image.url }}" alt="预览" style="width: 45px; height: 45px; object-fit: cover; border-radius: 8px;">
+                                    </a>
+                                </td>
+                                <td>{{ record.get_predicted_class_display }}</td>
+                                <td>
+                                    <div class="progress">
+                                        <div class="progress-bar" style="width: {{ record.confidence|floatformat:2 }}%">
+                                            {{ record.confidence|floatformat:2 }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>{{ record.processing_time|floatformat:3 }}秒</td>
+                                <td>{{ record.created_at|date:"Y-m-d H:i:s" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

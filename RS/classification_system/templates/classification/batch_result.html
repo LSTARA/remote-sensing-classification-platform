@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}批量分类结果 - 遥感图像场景分类系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <!-- 顶部概览统计卡片 -->
+        <div class="card">
+            <div class="card-header" style="background: #0a2540; color: white;">
+                <h4 style="color: white; margin: 0;"><i class="fas fa-check-circle"></i> 批量分类完成</h4>
+            </div>
+            <div class="card-body">
+                <!-- 统计卡片部分 -->
+                <div class="row text-center mb-4">
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <h5>总处理数量</h5>
+                            <h2 style="color: #0a2540;">{{ total }}</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <h5>成功</h5>
+                            <h2 style="color: #28a745;">{{ success_count }}</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <h5>失败</h5>
+                            <h2 style="color: #dc3545;">{{ fail_count }}</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <h5>平均确信度</h5>
+                            <h2 style="color: #17a2b8;">
+                                {% if avg_confidence %}{{ avg_confidence|floatformat:1 }}%{% else %}-{% endif %}
+                            </h2>
+                        </div>
+                    </div>
+                </div>
+
+                {% if category_stats %}
+                <div class="alert alert-info">
+                    <i class="fas fa-chart-pie"></i>
+                    检测到 <strong>{{ category_stats|length }}</strong> 种场景类别
+                    <hr>
+                    <div class="row">
+                        {% for cat, count in category_stats.items|slice:":6" %}
+                        <div class="col-md-2">
+                            <span class="badge bg-primary">{{ cat }}</span>: {{ count }}次
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 操作按钮区域 -->
+                <div class="mt-2 text-start">
+                    <a href="{% url 'classification:batch_export' %}" class="btn btn-custom" target="_blank">
+                        <i class="fas fa-download"></i> 导出CSV
+                    </a>
+                    <a href="{% url 'classification:classify' %}" class="btn btn-custom">
+                        <i class="fas fa-redo"></i> 继续分类
+                    </a>
+                    <a href="{% url 'classification:history' %}" class="btn btn-custom">
+                        <i class="fas fa-history"></i> 历史记录
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 详细数据表格 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header" style="background: #0a2540;">
+                <h5 style="color: white; margin: 0;"><i class="fas fa-table"></i> 详细结果</h5>
+                <div class="mt-2 d-flex flex-wrap align-items-center gap-2">
+                    <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="搜索文件名..." style="width: 200px;">
+                    <select id="filterCategory" class="form-select form-select-sm" style="width: 160px;">
+                        <option value="">全部类别</option>
+                    </select>
+                    <select id="filterModel" class="form-select form-select-sm" style="width: 160px;">
+                        <option value="">全部模型</option>
+                    </select>
+                    <input type="number" id="filterConfMin" class="form-control form-control-sm" placeholder="确信度 ≥" style="width: 100px;" min="0" max="100" step="1">
+                    <span class="text-white-50 small">已显示 <strong id="visibleCount">0</strong> / {{ total }} 条</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="resultTable">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>图像</th>
+                                <th>文件名</th>
+                                <th>来源ZIP</th>
+                                <th>使用模型</th>
+                                <th>预测类别</th>
+                                <th>识别确信度</th>
+                                <th>处理时间</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for result in results %}
+                            <tr class="{% if not result.success %}table-danger{% endif %}">
+                                <td>{{ forloop.counter }}</a>
+                                <td>
+                                    {% if result.image_url %}
+                                    <a href="{{ result.image_url }}" target="_blank">
+                                        <img src="{{ result.image_url }}" style="width: 45px; height: 45px; object-fit: cover; border-radius: 8px;">
+                                    </a>
+                                    {% else %}
+                                    <i class="fas fa-image fa-2x text-muted"></i>
+                                    {% endif %}
+                                </a>
+                                <td title="{{ result.filename }}">{{ result.filename|truncatechars:30 }}</a>
+                                <!-- 来源ZIP -->
+                                <td class="text-center">
+                                    {% if result.source_zip %}
+                                    <span class="badge bg-secondary">{{ result.source_zip|truncatechars:25 }}</span>
+                                    {% else %}
+                                    <span class="badge bg-info">单张上传</span>
+                                    {% endif %}
+                                </a>
+                                <!-- 使用模型 -->
+                                <td class="text-center">
+                                    {% if result.model_name %}
+                                    <span class="badge" style="background: #0a2540; color: white;">{{ result.model_name }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </a>
+                                <!-- 预测类别 -->
+                                <td class="text-center">
+                                    {% if result.predicted_class_display %}
+                                    <span class="badge bg-primary">{{ result.predicted_class_display }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </a>
+                                <!-- 识别确信度 -->
+                                <td class="text-center">
+                                    {% if result.success and result.confidence %}
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div class="progress" style="width: 80px; height: 8px; flex-grow: 1;">
+                                            <div class="progress-bar {% if result.confidence > 80 %}bg-success{% elif result.confidence > 60 %}bg-primary{% else %}bg-warning{% endif %}"
+                                                 style="width: {{ result.confidence }}%">
+                                            </div>
+                                        </div>
+                                        <small>{{ result.confidence|floatformat:1 }}%</small>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </a>
+                                <!-- 处理时间 -->
+                                <td class="text-center">
+                                    {% if result.success and result.processing_time %}
+                                    {{ result.processing_time|floatformat:3 }}s
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </a>
+                                <!-- 状态 -->
+                                <td class="text-center">
+                                    {% if result.success %}
+                                    <span class="badge bg-success"><i class="fas fa-check"></i> 成功</span>
+                                    {% else %}
+                                    <span class="badge bg-danger" title="{{ result.error }}"><i class="fas fa-times"></i> 失败</span>
+                                    {% endif %}
+                                </a>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="9" class="text-center text-muted">暂无分类结果</a>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 初始化过滤器选项
+(function initFilters() {
+    const rows = document.querySelectorAll('#resultTable tbody tr');
+    const categories = new Set();
+    const models = new Set();
+    rows.forEach(row => {
+        const cat = row.cells[5]?.textContent.trim();
+        const model = row.cells[4]?.textContent.trim();
+        if (cat && cat !== '-') categories.add(cat);
+        if (model && model !== '-') models.add(model);
+    });
+    const catSelect = document.getElementById('filterCategory');
+    const modelSelect = document.getElementById('filterModel');
+    [...categories].sort().forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catSelect.appendChild(o); });
+    [...models].sort().forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; modelSelect.appendChild(o); });
+})();
+
+function applyFilters() {
+    const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
+    const cat = document.getElementById('filterCategory')?.value || '';
+    const model = document.getElementById('filterModel')?.value || '';
+    const confMin = parseFloat(document.getElementById('filterConfMin')?.value) || 0;
+
+    const rows = document.querySelectorAll('#resultTable tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+        const filename = (row.cells[2]?.textContent || '').toLowerCase();
+        const rowCat = (row.cells[5]?.textContent || '').trim();
+        const rowModel = (row.cells[4]?.textContent || '').trim();
+        const confText = (row.cells[6]?.textContent || '').replace('%', '').trim();
+        const conf = parseFloat(confText) || 0;
+
+        const match = (!search || filename.includes(search))
+            && (!cat || rowCat === cat)
+            && (!model || rowModel.includes(model))
+            && (conf >= confMin);
+
+        row.style.display = match ? '' : 'none';
+        if (match) visible++;
+    });
+    const vc = document.getElementById('visibleCount');
+    if (vc) vc.textContent = visible;
+}
+
+document.getElementById('searchInput')?.addEventListener('input', applyFilters);
+document.getElementById('filterCategory')?.addEventListener('change', applyFilters);
+document.getElementById('filterModel')?.addEventListener('change', applyFilters);
+document.getElementById('filterConfMin')?.addEventListener('input', applyFilters);
+
+applyFilters();
+</script>
+
+<style>
+.stat-card {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+.stat-card h5 { color: #6c757d; font-size: 0.9rem; }
+.stat-card h2 { font-weight: bold; margin: 0; }
+
+.card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+/* 浅灰色小按钮 */
+.btn-custom {
+    background: #f1f3f5;
+    color: #495057;
+    border-radius: 6px;
+    padding: 5px 15px;
+    font-size: 0.85rem;
+    margin-right: 8px;
+    border: 1px solid #dee2e6;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-custom:hover {
+    background: #e9ecef;
+    color: #212529;
+    border-color: #ced4da;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transform: translateY(-1px);
+}
+
+.btn-custom i {
+    font-size: 0.8rem;
+}
+
+.table thead th {
+    border-top: none;
+    background: #f1f3f5;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.table tbody td {
+    vertical-align: middle;
+    text-align: center;
+}
+
+.badge {
+    font-weight: normal;
+    padding: 5px 10px;
+}
+</style>
+{% endblock %}

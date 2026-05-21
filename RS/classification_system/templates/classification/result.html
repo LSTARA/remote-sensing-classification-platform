@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}分类结果 - 遥感图像场景分类系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="background: #0a2540;">
+                <h4 style="color: white; margin: 0;"><i class="fas fa-image"></i> 上传的图像</h4>
+            </div>
+            <div class="card-body text-center">
+                {% if heatmap_url %}
+                <div class="mb-2">
+                    <button id="btnOriginal" class="btn btn-sm btn-primary" onclick="switchView('original')">原图</button>
+                    <button id="btnHeatmap" class="btn btn-sm btn-outline-secondary" onclick="switchView('heatmap')">Grad-CAM 热力图</button>
+                </div>
+                <img id="imgOriginal" src="{{ record.image.url }}" alt="上传图像" style="max-width: 100%; max-height: 400px;" class="img-thumbnail">
+                <img id="imgHeatmap" src="{{ heatmap_url }}" alt="Grad-CAM 热力图" style="max-width: 100%; max-height: 400px; display: none;" class="img-thumbnail">
+                {% else %}
+                <img src="{{ record.image.url }}" alt="上传图像" style="max-width: 100%; max-height: 400px;" class="img-thumbnail">
+                {% endif %}
+                <p class="text-muted mt-2">原始文件名：{{ record.original_filename }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="background: #0a2540;">
+                <h4 style="color: white; margin: 0;"><i class="fas fa-chart-pie"></i> 分类结果</h4>
+            </div>
+            <div class="card-body">
+                <div style="border: 2px solid #0a2540; border-radius: 16px; padding: 20px; margin-bottom: 20px;">
+
+                    <div class="alert alert-info mb-3" style="background: #e8f4f8; border: none; padding: 8px 15px;">
+                        <i class="fas fa-microchip"></i> 使用模型：<strong>{{ result.model_name|default:"CGFNet" }}</strong>
+                    </div>
+
+                    <h5 style="color: #0a2540; font-weight: bold; margin-bottom: 15px;">预测类别：{{ record.get_predicted_class_display }}</h5>
+
+                    <div class="row align-items-center mt-3">
+                        <div class="col-8">
+                            <p class="mb-1">识别确信度：<strong>{{ record.confidence|floatformat:2 }}%</strong></p>
+                            <div class="progress" style="height: 25px; border-radius: 12px;">
+                                <div class="progress-bar {% if record.confidence > 80 %}bg-success{% elif record.confidence > 60 %}bg-primary{% elif record.confidence > 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     style="width: {{ record.confidence }}%; border-radius: 12px;">
+                                    {{ record.confidence|floatformat:1 }}%
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-4 text-center">
+                            {% if record.confidence >= 90 %}
+                                <span style="font-size: 48px;">🟢</span>
+                                <h5 class="text-success mb-0">极高确信度</h5>
+                                <span>⭐⭐⭐⭐⭐</span>
+                            {% elif record.confidence >= 75 %}
+                                <span style="font-size: 48px;">🔵</span>
+                                <h5 class="text-primary mb-0">较高确信度</h5>
+                                <span>⭐⭐⭐⭐</span>
+                            {% elif record.confidence >= 60 %}
+                                <span style="font-size: 48px;">🟡</span>
+                                <h5 class="text-warning mb-0">中等确信度</h5>
+                                <span>⭐⭐⭐</span>
+                            {% elif record.confidence >= 40 %}
+                                <span style="font-size: 48px;">🟠</span>
+                                <h5 class="text-warning mb-0">偏低确信度</h5>
+                                <span>⭐⭐</span>
+                            {% else %}
+                                <span style="font-size: 48px;">🔴</span>
+                                <h5 class="text-danger mb-0">低确信度</h5>
+                                <span>⭐</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <p class="mt-3 mb-0">处理时间：{{ record.processing_time|floatformat:3 }}秒</p>
+                </div>
+
+                {% if confidence_warning %}
+                <div class="alert alert-warning mt-2">
+                    <i class="fas fa-exclamation-triangle"></i> {{ confidence_warning }}
+                </div>
+                {% endif %}
+
+                <h5 class="mt-3" style="color: #0a2540;">Top-5 预测结果：</h5>
+                {% for pred in top5 %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span style="color: #333;">{{ forloop.counter }}. {{ pred.class }}</span>
+                        <span style="color: #0a2540; font-weight: 500;">{{ pred.confidence|floatformat:2 }}%</span>
+                    </div>
+                    <div class="progress" style="height: 8px; border-radius: 10px; background: #e9ecef;">
+                        <div class="progress-bar" style="width: {{ pred.confidence }}%; background: #0a2540; border-radius: 10px;">
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-muted">暂无Top-5数据</p>
+                {% endfor %}
+
+                <div class="mt-4 text-center">
+                    <a href="{% url 'classification:classify' %}" class="btn" style="background: #0a2540; color: white; border-radius: 50px; padding: 8px 25px; margin-right: 10px;">
+                        <i class="fas fa-redo"></i> 继续分类
+                    </a>
+                    <a href="{% url 'classification:history' %}" class="btn btn-outline-secondary" style="border-radius: 50px; padding: 8px 25px;">
+                        <i class="fas fa-history"></i> 查看历史
+                    </a>
+                    <button onclick="copyResult()" class="btn btn-outline-success" style="border-radius: 50px; padding: 8px 25px;">
+                        <i class="fas fa-copy"></i> 复制结果
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function switchView(view) {
+    document.getElementById('imgOriginal').style.display = view === 'original' ? '' : 'none';
+    document.getElementById('imgHeatmap').style.display = view === 'heatmap' ? '' : 'none';
+    document.getElementById('btnOriginal').className = view === 'original'
+        ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-secondary';
+    document.getElementById('btnHeatmap').className = view === 'heatmap'
+        ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-secondary';
+}
+function copyResult() {
+    const text = '模型: {{ result.model_name|default:"-" }}\n类别: {{ record.get_predicted_class_display }}\n确信度: {{ record.confidence|floatformat:1 }}%\n时间: {{ record.created_at|date:"Y-m-d H:i:s" }}';
+    navigator.clipboard.writeText(text);
+    alert('已复制到剪贴板');
+}
+</script>
+
+<style>
+.card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+.img-thumbnail {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.btn-outline-secondary:hover {
+    background: #6c757d;
+    color: white;
+}
+.btn-outline-success:hover {
+    background: #28a745;
+    color: white;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}统计信息 - 遥感图像分类系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-chart-line"></i> 总体统计</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="stat-card">
+                            <h5>分类图像总数</h5>
+                            <h2>{{ total_count }}</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stat-card">
+                            <h5>平均准确率</h5>
+                            <h2>{{ avg_accuracy|floatformat:2 }}%</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stat-card">
+                            <h5>分类类别数</h5>
+                            <h2>{{ stats|length }}</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> Top 10 分类统计</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="statsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-table"></i> 详细统计</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>类别</th>
+                                <th>次数</th>
+                                <th>平均确信度</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in stats %}
+                            <tr>
+                                <td>{{ stat.predicted_class }}</td>
+                                <td>{{ stat.count }}</td>
+                                <td>{{ stat.avg_conf|floatformat:2 }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 统计图表
+const ctx = document.getElementById('statsChart').getContext('2d');
+const statsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: [{% for stat in stats %}'{{ stat.predicted_class }}',{% endfor %}],
+        datasets: [{
+            label: '分类次数',
+            data: [{% for stat in stats %}{{ stat.count }},{% endfor %}],
+            backgroundColor: 'rgba(10, 37, 64, 0.7)',
+            borderColor: 'rgba(10, 37, 64, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        },
+        responsive: true,
+        maintainAspectRatio: true
+    }
+});
+</script>
+
+<style>
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.06);
+}
+.stat-card h5 {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+.stat-card h2 {
+    color: #0a2540;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0;
+}
+</style>
+{% endblock %}

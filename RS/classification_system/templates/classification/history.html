@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}历史记录 - 遥感图像分类系统{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h4><i class="fas fa-history"></i> 分类历史记录</h4>
+    </div>
+    <div class="card-body">
+        <!-- 搜索和筛选栏 -->
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="搜索文件名/类别/模型..." style="width:200px;">
+            <select id="categoryFilter" class="form-select form-select-sm" style="width:130px;">
+                <option value="">全部类别</option>
+                {% for record in page_obj %}
+                <option value="{{ record.get_predicted_class_display }}">{{ record.get_predicted_class_display }}</option>
+                {% endfor %}
+            </select>
+            <select id="modelFilter" class="form-select form-select-sm" style="width:150px;">
+                <option value="">全部模型</option>
+            </select>
+            <select id="confidenceFilter" class="form-select form-select-sm" style="width:130px;">
+                <option value="">全部确信度</option>
+                <option value="high">≥75%</option>
+                <option value="medium">50%-75%</option>
+                <option value="low">＜50%</option>
+            </select>
+            <input type="date" id="dateFilter" class="form-control form-control-sm" style="width:130px;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetFilters()"><i class="fas fa-undo"></i></button>
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="exportSelected()" id="exportBtn" disabled><i class="fas fa-download"></i> 导出CSV</button>
+            <span id="filterInfo" class="text-muted small ms-auto"></span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover" id="historyTable">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="selectAll" onchange="toggleAll(this)"></th>
+                        <th>图像</th>
+                        <th>文件名</th>
+                        <th>预测类别</th>
+                        <th>确信度</th>
+                        <th>使用模型</th>
+                        <th>上传时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in page_obj %}
+                    <tr class="history-row"
+                        data-id="{{ record.id }}"
+                        data-filename="{{ record.original_filename|lower }}"
+                        data-category="{{ record.get_predicted_class_display }}"
+                        data-model="{{ record.model_name|default:'' }}"
+                        data-confidence="{{ record.confidence }}"
+                        data-date="{{ record.created_at|date:'Y-m-d' }}">
+                        <td><input type="checkbox" class="row-checkbox" onchange="updateExportBtn()"></td>
+                        <td>
+                            <a href="{{ record.image.url }}" target="_blank">
+                                <img src="{{ record.image.url }}" alt="预览" style="width: 45px; height: 45px; object-fit: cover; border-radius: 8px;">
+                            </a>
+                        </td>
+                        <td title="{{ record.original_filename }}">{{ record.original_filename|truncatechars:30 }}</td>
+                        <td><span style="color:#0a2540;font-weight:500;">{{ record.get_predicted_class_display }}</span></td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <div class="progress" style="width:80px;height:6px;">
+                                    <div class="progress-bar {% if record.confidence > 80 %}bg-success{% elif record.confidence > 60 %}bg-primary{% elif record.confidence > 40 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ record.confidence }}%"></div>
+                                </div>
+                                <small>{{ record.confidence|floatformat:1 }}%</small>
+                                {% if record.confidence >= 90 %}<span>🟢</span>
+                                {% elif record.confidence >= 75 %}<span>🔵</span>
+                                {% elif record.confidence >= 60 %}<span>🟡</span>
+                                {% elif record.confidence >= 40 %}<span>🟠</span>
+                                {% else %}<span>🔴</span>{% endif %}
+                            </div>
+                        </td>
+                        <td><small>{{ record.model_name|default:"-" }}</small></td>
+                        <td>{{ record.created_at|date:"m-d H:i" }}</td>
+                        <td class="text-nowrap">
+                            <a href="{% url 'classification:record_detail' record.id %}" style="color:#17a2b8;text-decoration:none;margin-right:10px;" title="查看详情"><i class="fas fa-eye"></i></a>
+                            <button onclick="deleteRecord({{ record.id }})" style="color:#dc3545;background:none;border:none;cursor:pointer;padding:0;" title="删除"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle"></i> 暂无分类记录
+                        </a>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 分页 -->
+        {% if page_obj.has_other_pages %}
+        <nav>
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1">&laquo; 第一页</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a>
+                </li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">最后一页 &raquo;</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+        <p class="text-muted mt-3">共 {{ total_count }} 条记录</p>
+    </div>
+</div>
+
+<script>
+// 删除记录函数
+function deleteRecord(recordId) {
+    if (confirm('确定要删除这条记录吗？')) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/record/${recordId}/delete/`;
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// 过滤功能 - 支持搜索ZIP文件名
+function filterTable() {
+    const searchText = document.getElementById('searchInput')?.value.toLowerCase().trim() || '';
+    const categoryValue = document.getElementById('categoryFilter')?.value || '';
+    const modelValue = document.getElementById('modelFilter')?.value || '';
+    const confidenceValue = document.getElementById('confidenceFilter')?.value || '';
+    const dateValue = document.getElementById('dateFilter')?.value || '';
+
+    const rows = document.querySelectorAll('#historyTable tbody tr.history-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const filename = row.dataset.filename || '';
+        const category = row.dataset.category || '';
+        const model = row.dataset.model || '';
+        const confidence = parseFloat(row.dataset.confidence) || 0;
+        const date = row.dataset.date || '';
+
+        let show = true;
+
+        if (searchText) {
+            if (!filename.includes(searchText) && !category.toLowerCase().includes(searchText) && !model.toLowerCase().includes(searchText)) {
+                show = false;
+            }
+        }
+
+        if (show && categoryValue && category !== categoryValue) show = false;
+        if (show && modelValue && model !== modelValue) show = false;
+
+        if (show && confidenceValue) {
+            if (confidenceValue === 'high' && confidence < 75) show = false;
+            else if (confidenceValue === 'medium' && (confidence < 50 || confidence >= 75)) show = false;
+            else if (confidenceValue === 'low' && confidence >= 50) show = false;
+        }
+
+        if (show && dateValue && date !== dateValue) show = false;
+
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+
+    const filterInfo = document.getElementById('filterInfo');
+    if (filterInfo) {
+        const totalRows = rows.length;
+        filterInfo.textContent = (searchText || categoryValue || modelValue || confidenceValue || dateValue)
+            ? visibleCount + ' / ' + totalRows + ' 条'
+            : totalRows + ' 条';
+    }
+}
+
+// 重置筛选
+function toggleAll(checkbox) {
+    document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+        cb.checked = checkbox.checked;
+    });
+    updateExportBtn();
+}
+function updateExportBtn() {
+    var checked = document.querySelectorAll('.row-checkbox:checked').length;
+    document.getElementById('exportBtn').disabled = checked === 0;
+}
+function exportSelected() {
+    var ids = [];
+    document.querySelectorAll('.row-checkbox:checked').forEach(function(cb) {
+        ids.push(cb.closest('tr').dataset.id);
+    });
+    if (ids.length === 0) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{% url "classification:history_export" %}';
+    form.innerHTML = '<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}"><input type="hidden" name="record_ids" value="' + ids.join(',') + '">';
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+}
+function resetFilters() {
+    ['searchInput','categoryFilter','modelFilter','confidenceFilter','dateFilter'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    filterTable();
+}
+
+// 绑定事件
+document.addEventListener('DOMContentLoaded', function() {
+    ['searchInput','categoryFilter','modelFilter','confidenceFilter','dateFilter'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.addEventListener(el.tagName === 'INPUT' && el.type === 'text' ? 'keyup' : 'change', filterTable);
+    });
+
+    // 从表格行中提取并填充类别和模型选项
+    var modelFilter = document.getElementById('modelFilter');
+    var models = new Set();
+    document.querySelectorAll('#historyTable tbody tr.history-row').forEach(function(row){
+        var m = row.dataset.model;
+        if (m) models.add(m);
+    });
+    if (modelFilter) {
+        Array.from(models).sort().forEach(function(m){
+            var o = document.createElement('option');
+            o.value = m; o.textContent = m;
+            modelFilter.appendChild(o);
+        });
+    }
+
+    // 去重类别选项
+    var catFilter = document.getElementById('categoryFilter');
+    if (catFilter) {
+        var seen = new Set();
+        catFilter.querySelectorAll('option').forEach(function(o){
+            if (o.value && seen.has(o.value)) o.remove();
+            else if (o.value) seen.add(o.value);
+        });
+    }
+});
+</script>
+
+<style>
+.history-row {
+    transition: background 0.2s;
+}
+.history-row:hover {
+    background: #f8f9fa !important;
+}
+.progress {
+    height: 6px;
+}
+</style>
+{% endblock %}

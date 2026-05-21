@@ -1,0 +1,9 @@
+django>=3.2
+torch>=1.10
+torchvision>=0.11
+timm>=0.6
+antialiased-cnns>=0.3
+numpy>=1.21
+Pillow>=9.0
+mysqlclient>=2.1
+opencv-python>=4.5

@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}地图分类 - 遥感图像场景分类系统{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header" style="background: #0a2540;">
+                <h4 style="color: white; margin: 0;"><i class="fas fa-map-marked-alt"></i> 交互式地图场景分类</h4>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <!-- 工具栏 -->
+                <div style="display: flex; align-items: center; gap: 10px; padding: 10px 15px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; flex-wrap: wrap;">
+                    <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="搜索地点..." style="width: 180px;">
+                    <button id="searchBtn" class="btn btn-sm btn-primary"><i class="fas fa-search"></i> 定位</button>
+                    <button id="drawRectBtn" class="btn btn-sm btn-outline-secondary"><i class="fas fa-vector-square"></i> 框选区域</button>
+                    <select id="mapModelSelect" class="form-select form-select-sm" style="width: 140px;">
+                        <option value="cgfnet">CGFNet（全局建模强，精度高）</option>
+                        <option value="lwganet">LWGANet（轻量高效，适合部署）</option>
+                    </select>
+                    <select id="mapDatasetSelect" class="form-select form-select-sm" style="width: 160px;">
+                        <option value="AID">AID (30类)</option>
+                        <option value="NWPU">NWPU (45类)</option>
+                        <option value="UCM">UCM (21类)</option>
+                    </select>
+                    <button id="classifyBtn" class="btn btn-sm btn-success" disabled><i class="fas fa-check-circle"></i> 分类所选区域</button>
+                    <span id="statusText" class="text-muted small"></span>
+                </div>
+                <!-- 地图 -->
+                <div id="map" style="height: 480px; width: 100%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 分类结果 -->
+<div id="resultPanel" class="row" style="display: none;">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="background: #0a2540;">
+                <h4 style="color: white; margin: 0;"><i class="fas fa-image"></i> 框选区域</h4>
+            </div>
+            <div class="card-body text-center">
+                <div id="heatmapTabs" class="mb-2" style="display:none;">
+                    <button id="btnOriginal" class="btn btn-sm btn-primary" onclick="switchMapView('original')">原图</button>
+                    <button id="btnHeatmap" class="btn btn-sm btn-outline-secondary" onclick="switchMapView('heatmap')">Grad-CAM 热力图</button>
+                </div>
+                <img id="imgOriginal" src="" alt="框选区域" style="max-width:100%;max-height:400px;border-radius:12px;display:none;" class="img-thumbnail">
+                <img id="imgHeatmap" src="" alt="Grad-CAM 热力图" style="max-width:100%;max-height:400px;border-radius:12px;display:none;" class="img-thumbnail">
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="background: #0a2540;">
+                <h4 style="color: white; margin: 0;"><i class="fas fa-chart-pie"></i> 分类结果</h4>
+            </div>
+            <div class="card-body" id="resultContent"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<style>
+#map { border-radius: 0 0 12px 12px; }
+.leaflet-draw-toolbar { margin-top: 0 !important; }
+.leaflet-draw-toolbar a { background-color: #fff !important; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+// ========== 初始化地图 ==========
+const map = L.map('map').setView([35.86, 104.19], 5);
+
+// 卫星图层 (ESRI World Imagery, 免费无需密钥)
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; ESRI',
+    maxZoom: 18
+}).addTo(map);
+
+// 标注图层
+const drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+// 框选控件
+const drawControl = new L.Control.Draw({
+    draw: {
+        polygon: false, polyline: false, circle: false,
+        circlemarker: false, marker: false,
+        rectangle: { shapeOptions: { color: '#e74c3c', weight: 2, fillOpacity: 0.1 } }
+    },
+    edit: { featureGroup: drawnItems, edit: false, remove: false }
+});
+map.addControl(drawControl);
+
+let currentBounds = null;
+
+map.on(L.Draw.Event.CREATED, function(e) {
+    drawnItems.clearLayers();
+    drawnItems.addLayer(e.layer);
+    currentBounds = e.layer.getBounds();
+    document.getElementById('classifyBtn').disabled = false;
+    document.getElementById('statusText').textContent =
+        '已选择区域: ' + currentBounds.toBBoxString();
+});
+
+// ========== 搜索定位 ==========
+document.getElementById('searchBtn').addEventListener('click', function() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+    // 中国范围边界框: [南,西,北,东]
+    const params = new URLSearchParams({
+        format: 'json', q: q, limit: 3, 'accept-language': 'zh',
+        countrycodes: 'cn', bounded: '1',
+        viewbox: '73,-10,135,55'  // 中国地理边界
+    });
+    const url = 'https://nominatim.openstreetmap.org/search?' + params.toString();
+    console.log('Search URL:', url);
+    fetch(url, {
+        headers: { 'User-Agent': 'RSClassifyApp/1.0' },
+        signal: AbortSignal.timeout(8000)
+    }).then(function(r) {
+        console.log('Response status:', r.status);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+    }).then(function(text) {
+        console.log('Response text:', text.substring(0, 200));
+        var data = JSON.parse(text);
+        if (Array.isArray(data) && data.length > 0) {
+            var lat = parseFloat(data[0].lat);
+            var lon = parseFloat(data[0].lon);
+            map.setView([lat, lon], 15);
+            L.marker([lat, lon]).addTo(drawnItems)
+                .bindPopup('<b>' + data[0].display_name.split(',')[0] + '</b>').openPopup();
+            document.getElementById('statusText').textContent =
+                '已定位: ' + data[0].display_name.split(',')[0];
+        } else {
+            alert('未找到"' + q + '"，请尝试英文名或更具体的地名');
+        }
+    }).catch(function(e) {
+        console.error('Search error:', e);
+        alert('搜索失败，请检查网络连接后重试');
+    });
+});
+
+document.getElementById('searchInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('searchBtn').click();
+});
+
+// ========== 框选按钮 ==========
+document.getElementById('drawRectBtn').addEventListener('click', function() {
+    new L.Draw.Rectangle(map, drawControl.options.draw.rectangle).enable();
+});
+
+// ========== 分类 ==========
+document.getElementById('classifyBtn').addEventListener('click', function() {
+    if (!currentBounds) return;
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 分类中...';
+    document.getElementById('loadingOverlay').style.display = 'flex';
+
+    // 截图地图区域
+    html2canvas(document.getElementById('map'), { useCORS: true, scale: 1 }).then(function(canvas) {
+        const mapHeight = document.getElementById('map').offsetHeight;
+        const mapWidth = document.getElementById('map').offsetWidth;
+        const ne = map.latLngToContainerPoint(currentBounds.getNorthEast());
+        const sw = map.latLngToContainerPoint(currentBounds.getSouthWest());
+        const x = Math.min(ne.x, sw.x), y = Math.min(ne.y, sw.y);
+        const w = Math.abs(ne.x - sw.x), h = Math.abs(ne.y - sw.y);
+
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = w; cropCanvas.height = h;
+        cropCanvas.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, w, h);
+
+        cropCanvas.toBlob(function(blob) {
+            const fd = new FormData();
+            fd.append('image', blob, 'map_region.png');
+            fd.append('model_choice', document.getElementById('mapModelSelect')?.value || 'cgfnet');
+            fd.append('dataset_choice', document.getElementById('mapDatasetSelect')?.value || 'NWPU');
+
+            fetch('{% url "classification:api_classify" %}', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    var conf = data.confidence;
+                    var starIcon, starCount, levelText, levelColor, progColor;
+                    if (conf >= 90) { starIcon = '🟢'; levelText = '极高确信度'; levelColor = 'text-success'; progColor = 'bg-success'; starCount = 5; }
+                    else if (conf >= 75) { starIcon = '🔵'; levelText = '较高确信度'; levelColor = 'text-primary'; progColor = 'bg-primary'; starCount = 4; }
+                    else if (conf >= 60) { starIcon = '🟡'; levelText = '中等确信度'; levelColor = 'text-warning'; progColor = 'bg-warning'; starCount = 3; }
+                    else if (conf >= 40) { starIcon = '🟠'; levelText = '偏低确信度'; levelColor = 'text-warning'; progColor = 'bg-warning'; starCount = 2; }
+                    else { starIcon = '🔴'; levelText = '低确信度'; levelColor = 'text-danger'; progColor = 'bg-danger'; starCount = 1; }
+                    var stars = Array(starCount+1).join('⭐');
+
+                    document.getElementById('imgOriginal').src = URL.createObjectURL(blob);
+                    document.getElementById('imgOriginal').style.display = '';
+                    document.getElementById('imgHeatmap').style.display = 'none';
+                    if (data.heatmap_url) {
+                        document.getElementById('imgHeatmap').src = data.heatmap_url;
+                        document.getElementById('heatmapTabs').style.display = '';
+                        document.getElementById('btnOriginal').className = 'btn btn-sm btn-primary';
+                        document.getElementById('btnHeatmap').className = 'btn btn-sm btn-outline-secondary';
+                    } else {
+                        document.getElementById('heatmapTabs').style.display = 'none';
+                    }
+                    document.getElementById('resultPanel').style.display = '';
+
+                    var html = '';
+                    html += '<div style="border: 2px solid #0a2540; border-radius: 16px; padding: 20px; margin-bottom: 20px;">';
+                    html += '<div class="alert alert-info mb-3" style="background:#e8f4f8;border:none;padding:8px 15px;"><i class="fas fa-microchip"></i> 使用模型：<strong>' + (data.model_name || '-') + '</strong></div>';
+                    html += '<h5 style="color:#0a2540;font-weight:bold;margin-bottom:15px;">预测类别：' + data.predicted_class + '</h5>';
+                    html += '<div class="row align-items-center mt-3"><div class="col-8">';
+                    html += '<p class="mb-1">识别确信度：<strong>' + conf.toFixed(2) + '%</strong></p>';
+                    html += '<div class="progress" style="height:25px;border-radius:12px;"><div class="progress-bar ' + progColor + '" style="width:' + conf + '%;border-radius:12px;">' + conf.toFixed(1) + '%</div></div>';
+                    html += '</div><div class="col-4 text-center">';
+                    html += '<span style="font-size:48px;">' + starIcon + '</span><h5 class="' + levelColor + ' mb-0">' + levelText + '</h5><span>' + stars + '</span>';
+                    html += '</div></div>';
+                    html += '<p class="mt-3 mb-0">处理时间：' + data.processing_time.toFixed(3) + '秒</p>';
+                    html += '</div>';
+
+                    if (data.top5 && data.top5.length > 0) {
+                        html += '<h5 class="mt-3" style="color:#0a2540;">Top-5 预测结果：</h5>';
+                        for (var i = 0; i < data.top5.length; i++) {
+                            html += '<div class="mb-3"><div class="d-flex justify-content-between mb-1"><span>' + (i+1) + '. ' + data.top5[i].class + '</span><span>' + data.top5[i].confidence.toFixed(2) + '%</span></div>';
+                            html += '<div class="progress" style="height:8px;border-radius:10px;background:#e9ecef;"><div class="progress-bar" style="width:' + data.top5[i].confidence + '%;background:#0a2540;border-radius:10px;"></div></div></div>';
+                        }
+                    }
+                    html += '<div class="mt-3 text-center"><button onclick="copyMapResult()" class="btn btn-outline-success" style="border-radius:50px;padding:8px 25px;"><i class="fas fa-copy"></i> 复制结果</button></div>';
+
+                    document.getElementById('resultContent').innerHTML = html;
+                } else {
+                    alert('分类失败: ' + (data.error || '未知错误'));
+                }
+                document.getElementById('loadingOverlay').style.display = 'none';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check-circle"></i> 分类所选区域';
+                document.getElementById('statusText').textContent = '';
+            })
+            .catch(function(e) {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                alert('请求失败: ' + e);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check-circle"></i> 分类所选区域';
+            });
+        }, 'image/png');
+    });
+});
+
+function switchMapView(view) {
+    document.getElementById('imgOriginal').style.display = view === 'original' ? '' : 'none';
+    document.getElementById('imgHeatmap').style.display = view === 'heatmap' ? '' : 'none';
+    document.getElementById('btnOriginal').className = view === 'original'
+        ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-secondary';
+    document.getElementById('btnHeatmap').className = view === 'heatmap'
+        ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-secondary';
+}
+function copyMapResult() {
+    var lines = [];
+    var content = document.getElementById('resultContent');
+    if (content) {
+        var text = content.innerText || content.textContent;
+        navigator.clipboard.writeText(text).then(function(){ alert('已复制到剪贴板'); });
+    }
+}
+</script>
+{% endblock %}
